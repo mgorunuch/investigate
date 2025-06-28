@@ -5,7 +5,7 @@ import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { signal } from '@preact/signals-react';
 import type { ViewportState } from '@/packages/infinite-canvas';
 import { cn } from '@/lib/utils';
-import { User, Globe, Shield, Database, Link, Target, GripVertical, MoreVertical, Copy, Eye } from 'lucide-react';
+import { User, Globe, Shield, Database, Target, GripVertical, MoreVertical, Copy, Eye } from 'lucide-react';
 import { useDragSystem, type Entity as BaseEntity } from '@/hooks/useDragSystem';
 
 // Extended Entity interface for OSINT entities
@@ -15,15 +15,18 @@ interface OSINTEntity extends BaseEntity {
   subtitle: string;
   type: string;
   confidence: 'high' | 'medium' | 'low';
+  isVisible: boolean;
 }
 
 // OSINT Entity Components
-const EntityCard = ({ 
-  icon: Icon, 
-  title, 
-  subtitle, 
-  type, 
+const EntityCard = ({
+  icon: Icon,
+  title,
+  subtitle,
+  type,
   confidence,
+  isVisible,
+  onToggleVisibility,
   style,
   className = "",
   dragHandlers,
@@ -35,6 +38,8 @@ const EntityCard = ({
   subtitle: string;
   type: string;
   confidence: 'high' | 'medium' | 'low';
+  isVisible: boolean;
+  onToggleVisibility: () => void;
   style?: React.CSSProperties;
   className?: string;
   dragHandlers?: {
@@ -51,9 +56,9 @@ const EntityCard = ({
   };
 
   return (
-    <div 
+    <div
       className={cn(
-        "absolute glass-card min-w-48 max-w-64 group transition-shadow",
+        "absolute glass-card min-w-48 max-w-64 group transition-all duration-300",
         "border-2",
         confidenceColors[confidence],
         isBeingDragged && "shadow-2xl z-50",
@@ -64,7 +69,7 @@ const EntityCard = ({
       }}
     >
       {/* Container Header with Drag Handle and Actions */}
-      <div 
+      <div
         className={cn(
           "p-1.5 border-b border-border-secondary flex items-center justify-between opacity-60 hover:opacity-100 select-none transition-all duration-150",
           isBeingDragged ? "cursor-grabbing bg-accent/10" : "cursor-grab hover:bg-accent/5"
@@ -74,31 +79,38 @@ const EntityCard = ({
         onTouchStart={dragHandlers?.onTouchStart}
         style={{ touchAction: 'none' }}
       >
-        <div className="flex items-center gap-1 pointer-events-none">
+        <div className="flex items-center gap-1.5 pointer-events-none">
           <div className="p-0.5 rounded hover:bg-accent/20 transition-colors">
             <GripVertical className="w-3 h-3 text-muted group-hover:text-accent" />
           </div>
-          <span className="text-xs text-muted">{type}</span>
+          <div className="glass-button p-1 rounded">
+            <Icon className="w-3 h-3 text-accent" />
+          </div>
+          <span className="text-xs text-muted font-medium">{title}</span>
         </div>
         <div className="flex items-center pointer-events-auto">
-          <button 
-            className="p-0.5 hover:bg-border-secondary rounded opacity-0 group-hover:opacity-100" 
-            title="View Details"
+          <button
+            className="p-0.5 hover:bg-border-secondary rounded opacity-0 group-hover:opacity-100 transition-all"
+            title={isVisible ? "Hide entity" : "Show entity"}
+            onClick={onToggleVisibility}
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
           >
-            <Eye className="w-3 h-3 text-muted" />
+            <Eye className={cn(
+              "w-3 h-3 transition-all",
+              isVisible ? "text-accent" : "text-muted"
+            )} />
           </button>
-          <button 
-            className="p-0.5 hover:bg-border-secondary rounded opacity-0 group-hover:opacity-100" 
+          <button
+            className="p-0.5 hover:bg-border-secondary rounded opacity-0 group-hover:opacity-100"
             title="Copy"
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
           >
             <Copy className="w-3 h-3 text-muted" />
           </button>
-          <button 
-            className="p-0.5 hover:bg-border-secondary rounded opacity-0 group-hover:opacity-100" 
+          <button
+            className="p-0.5 hover:bg-border-secondary rounded opacity-0 group-hover:opacity-100"
             title="More Actions"
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
@@ -108,40 +120,42 @@ const EntityCard = ({
         </div>
       </div>
 
-      {/* Card Content */}
-      <div className="p-4">
-        <div className="flex items-start gap-3">
-          <div className="glass-button p-2 rounded-md">
-            <Icon className="w-5 h-5 text-accent" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-foreground text-sm truncate">{title}</h3>
-            <p className="text-xs text-muted mt-1 truncate">{subtitle}</p>
-            <div className="flex items-center justify-between mt-3">
-              <span className="text-xs px-2 py-1 glass rounded-full text-muted">
-                Entity
-              </span>
-              <div className="flex items-center gap-1">
-                <div className={cn(
-                  "w-2 h-2 rounded-full",
-                  confidence === 'high' ? 'bg-gray-800' :
-                  confidence === 'medium' ? 'bg-gray-600' : 'bg-gray-400'
-                )}></div>
-                <span className="text-xs text-muted capitalize">{confidence}</span>
+      {/* Card Content - Only show when visible */}
+      {isVisible && (
+        <div className="p-4">
+          <div className="flex items-start gap-3">
+            <div className="glass-button p-2 rounded-md">
+              <Icon className="w-5 h-5 text-accent" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-foreground text-sm truncate">{title}</h3>
+              <p className="text-xs text-muted mt-1 truncate">{subtitle}</p>
+              <div className="flex items-center justify-between mt-3">
+                <span className="text-xs px-2 py-1 glass rounded-full text-muted">
+                  Entity
+                </span>
+                <div className="flex items-center gap-1">
+                  <div className={cn(
+                    "w-2 h-2 rounded-full",
+                    confidence === 'high' ? 'bg-gray-800' :
+                    confidence === 'medium' ? 'bg-gray-600' : 'bg-gray-400'
+                  )}></div>
+                  <span className="text-xs text-muted capitalize">{confidence}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
 
-const ConnectionLine = ({ 
-  from, 
+const ConnectionLine = ({
+  from,
   to
-}: { 
-  from: { x: number; y: number }; 
+}: {
+  from: { x: number; y: number };
   to: { x: number; y: number };
 }) => {
   const startX = from.x + 120; // Center of card
@@ -159,10 +173,10 @@ const ConnectionLine = ({
         height: Math.abs(endY - startY),
       }}
     >
-      <svg 
+      <svg
         className="absolute pointer-events-none"
-        style={{ 
-          width: '100%', 
+        style={{
+          width: '100%',
           height: '100%',
           overflow: 'visible'
         }}
@@ -189,13 +203,14 @@ const ConnectionLine = ({
 
 // Initial data
 const initialEntities: OSINTEntity[] = [
-  { 
+  {
     id: 'person1',
     icon: User,
     title: 'John Doe',
     subtitle: 'Target Individual',
     type: 'Person',
     confidence: 'high' as const,
+    isVisible: true,
     position: { x: 200, y: 150 }
   },
   {
@@ -205,6 +220,7 @@ const initialEntities: OSINTEntity[] = [
     subtitle: 'Primary Domain',
     type: 'Domain',
     confidence: 'high' as const,
+    isVisible: true,
     position: { x: 500, y: 100 }
   },
   {
@@ -214,6 +230,7 @@ const initialEntities: OSINTEntity[] = [
     subtitle: 'Let\'s Encrypt Authority',
     type: 'Certificate',
     confidence: 'medium' as const,
+    isVisible: true,
     position: { x: 800, y: 200 }
   },
   {
@@ -223,6 +240,7 @@ const initialEntities: OSINTEntity[] = [
     subtitle: 'Breach from 2023',
     type: 'Data',
     confidence: 'low' as const,
+    isVisible: true,
     position: { x: 200, y: 400 }
   },
   {
@@ -232,6 +250,7 @@ const initialEntities: OSINTEntity[] = [
     subtitle: 'Twitter Profile',
     type: 'Social',
     confidence: 'high' as const,
+    isVisible: true,
     position: { x: 600, y: 350 }
   }
 ];
@@ -245,7 +264,7 @@ export default function CanvasPage() {
 
   // Use local state for viewport to avoid signal re-render issues with InfiniteCanvas
   const [localViewport, setLocalViewport] = useState<ViewportState>({ x: 0, y: 0, scale: 1 });
-  
+
   // Use React state for entities to ensure proper re-renders
   const [entities, setEntities] = useState<OSINTEntity[]>(initialEntities);
 
@@ -268,15 +287,30 @@ export default function CanvasPage() {
     setEntities(prev => {
       const entityIndex = prev.findIndex(entity => entity.id === entityId);
       if (entityIndex === -1) return prev;
-      
+
       const entity = prev[entityIndex];
       // Only update if position actually changed to avoid unnecessary re-renders
       if (entity.position.x === newPosition.x && entity.position.y === newPosition.y) {
         return prev;
       }
-      
+
       const newEntities = [...prev];
       newEntities[entityIndex] = { ...entity, position: newPosition };
+      return newEntities;
+    });
+  }, []);
+
+  // Handle entity visibility toggle
+  const handleToggleVisibility = useCallback((entityId: string) => {
+    setEntities(prev => {
+      const entityIndex = prev.findIndex(entity => entity.id === entityId);
+      if (entityIndex === -1) return prev;
+
+      const newEntities = [...prev];
+      newEntities[entityIndex] = {
+        ...newEntities[entityIndex],
+        isVisible: !newEntities[entityIndex].isVisible
+      };
       return newEntities;
     });
   }, []);
@@ -297,7 +331,7 @@ export default function CanvasPage() {
   // Create stable event handler references
   const dragHandlersRef = useRef(globalDragHandlers);
   dragHandlersRef.current = globalDragHandlers;
-  
+
   const isDraggingRef = useRef(isDragging);
   isDraggingRef.current = isDragging;
 
@@ -314,12 +348,12 @@ export default function CanvasPage() {
     } as React.MouseEvent;
     dragHandlersRef.current.onMouseMove(syntheticEvent);
   }, []);
-  
+
   const handleMouseUp = useCallback(() => {
     if (!isDraggingRef.current) return;
     dragHandlersRef.current.onMouseUp();
   }, []);
-  
+
   const handleTouchMove = useCallback((e: TouchEvent) => {
     if (!isDraggingRef.current || e.touches.length === 0) return;
     e.preventDefault();
@@ -336,7 +370,7 @@ export default function CanvasPage() {
     } as unknown as React.TouchEvent;
     dragHandlersRef.current.onTouchMove(syntheticEvent);
   }, []);
-  
+
   const handleTouchEnd = useCallback(() => {
     if (!isDraggingRef.current) return;
     dragHandlersRef.current.onTouchEnd();
@@ -385,7 +419,7 @@ export default function CanvasPage() {
         >
           {/* Connection Lines */}
           {connections.map((connection, index) => (
-            <ConnectionLine 
+            <ConnectionLine
               key={index}
               from={connection.from}
               to={connection.to}
@@ -401,6 +435,8 @@ export default function CanvasPage() {
               subtitle={entity.subtitle}
               type={entity.type}
               confidence={entity.confidence}
+              isVisible={entity.isVisible}
+              onToggleVisibility={() => handleToggleVisibility(entity.id)}
               style={{
                 left: entity.position.x,
                 top: entity.position.y
