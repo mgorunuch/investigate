@@ -45,10 +45,10 @@ export class DOMPanZoomHandler {
     container.addEventListener('contextmenu', handleContextMenu);
 
     // Store listeners for cleanup
-    this.listeners.set('pointerdown', handleMouseDown);
-    this.listeners.set('pointermove', handleMouseMove);
-    this.listeners.set('pointerup', handleMouseUp);
-    this.listeners.set('pointercancel', handleMouseUp);
+    this.listeners.set('pointerdown', handleMouseDown as CanvasEventHandler);
+    this.listeners.set('pointermove', handleMouseMove as CanvasEventHandler);
+    this.listeners.set('pointerup', handleMouseUp as CanvasEventHandler);
+    this.listeners.set('pointercancel', handleMouseUp as CanvasEventHandler);
     this.listeners.set('wheel', handleWheel as CanvasEventHandler);
     this.listeners.set('touchstart', handleTouchStart as CanvasEventHandler);
     this.listeners.set('touchmove', handleTouchMove as CanvasEventHandler);
@@ -69,10 +69,22 @@ export class DOMPanZoomHandler {
   }
 
   private handlePointerDown(event: PointerEvent): void {
-    const state = this.manager.getState();
-    const options = (this.manager as any).options;
+    const options = this.manager.getOptions();
     
     if (!options.enablePan || event.button !== 0) return;
+
+    // Check if the event target has a drag handle or is marked as draggable
+    // This prevents canvas panning when an entity is being dragged
+    const target = event.target as HTMLElement;
+    const isDraggableElement = target.closest('[data-draggable="true"]') || 
+                              target.closest('.draggable') ||
+                              target.hasAttribute('draggable') ||
+                              target.style.cursor === 'grab' ||
+                              target.style.cursor === 'grabbing';
+    
+    if (isDraggableElement) {
+      return; // Don't start canvas panning for draggable elements
+    }
 
     // Only track primary pointer
     if (this.pointerId !== null) return;
@@ -120,7 +132,7 @@ export class DOMPanZoomHandler {
   }
 
   private handleWheel(event: WheelEvent): void {
-    const options = (this.manager as any).options;
+    const options = this.manager.getOptions();
     if (!options.enableZoom) return;
 
     // Always prevent default to stop any scrolling

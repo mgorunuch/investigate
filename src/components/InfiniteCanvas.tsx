@@ -1,107 +1,253 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { DOMCanvasManager, DOMPanZoomHandler, type DOMCanvasOptions, type ViewportState } from '@/packages/infinite-canvas';
 import { cn } from '@/lib/utils';
 import { Plus, Minus, RotateCcw, Search, Layers, Map } from 'lucide-react';
 
+/**
+ * Props for the InfiniteCanvas component
+ */
 interface InfiniteCanvasProps extends DOMCanvasOptions {
+  /** React children to render inside the canvas viewport */
   children?: React.ReactNode;
+  /** Additional CSS classes to apply to the canvas container */
   className?: string;
+  /** Whether to show the debug viewport information panel */
   showDebug?: boolean;
+  /** Callback fired when the viewport state changes */
   onViewportChange?: (viewport: ViewportState) => void;
 }
 
-export default function InfiniteCanvas({
+/**
+ * Public API interface for the InfiniteCanvas component
+ */
+export interface InfiniteCanvasRef {
+  /** Pan the viewport by the specified pixel deltas */
+  panBy: (deltaX: number, deltaY: number) => void;
+  /** Zoom to a specific scale level, optionally around a center point */
+  zoomTo: (scale: number, center?: { x: number; y: number }) => void;
+  /** Zoom by a relative scale delta, optionally around a center point */
+  zoomBy: (scaleDelta: number, center?: { x: number; y: number }) => void;
+  /** Center the viewport on a specific world coordinate */
+  centerOn: (worldPoint: { x: number; y: number }) => void;
+  /** Fit the viewport to contain the specified world bounds with optional padding */
+  fit: (bounds: { minX: number; minY: number; maxX: number; maxY: number }, padding?: number) => void;
+  /** Reset the viewport to its initial state (0,0,1) */
+  reset: () => void;
+  /** Get the current viewport state */
+  getViewport: () => ViewportState;
+  /** Convert screen coordinates to world coordinates */
+  screenToWorld: (screenPoint: { x: number; y: number }) => { x: number; y: number };
+  /** Convert world coordinates to screen coordinates */
+  worldToScreen: (worldPoint: { x: number; y: number }) => { x: number; y: number };
+}
+
+/**
+ * InfiniteCanvas component provides an infinite zoomable and pannable canvas
+ * for rendering and interacting with elements in a virtual world space.
+ * 
+ * Features:
+ * - Infinite pan and zoom with smooth transitions
+ * - Event-driven viewport updates for performance
+ * - Customizable backgrounds (dots, grid, or none)
+ * - Touch and mouse input support
+ * - Type-safe API with error handling
+ * - Debug mode with viewport information
+ * 
+ * @example
+ * ```tsx
+ * const canvasRef = useRef<InfiniteCanvasRef>(null);
+ * 
+ * return (
+ *   <InfiniteCanvas 
+ *     ref={canvasRef}
+ *     onViewportChange={(viewport) => console.log(viewport)}
+ *     showDebug={true}
+ *   >
+ *     <div style={{ position: 'absolute', left: 100, top: 100 }}>
+ *       Content in world space
+ *     </div>
+ *   </InfiniteCanvas>
+ * );
+ * ```
+ */
+const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
   children,
   className = '',
   showDebug = false,
   onViewportChange,
   ...canvasOptions
-}: InfiniteCanvasProps) {
+}, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLElement>(null);
+  const [isViewportReady, setIsViewportReady] = useState(false);
+  const [viewportKey, setViewportKey] = useState(0);
   const managerRef = useRef<DOMCanvasManager | null>(null);
   const handlerRef = useRef<DOMPanZoomHandler | null>(null);
   const [viewport, setViewport] = useState<ViewportState>({ x: 0, y: 0, scale: 1 });
 
+  // Use ref to avoid dependency issues with callback
+  const onViewportChangeRef = useRef(onViewportChange);
+  onViewportChangeRef.current = onViewportChange;
+
+  // Memoize canvas options to prevent unnecessary effect re-runs
+  const stableCanvasOptions = useMemo(() => ({
+    minScale: 0.1,
+    maxScale: 5,
+    scaleSensitivity: 0.001,
+    enablePan: true,
+    enableZoom: true,
+    smoothTransitions: false,
+    background: {
+      type: 'dots' as const,
+      color: '#e5e7eb',
+      size: 30,
+      dotSize: 2
+    },
+    ...canvasOptions
+  }), [
+    JSON.stringify(canvasOptions)
+  ]);
+
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Initialize canvas manager
-    const manager = new DOMCanvasManager(containerRef.current, {
-      minScale: 0.1,
-      maxScale: 5,
-      scaleSensitivity: 0.001,
-      enablePan: true,
-      enableZoom: true,
-      smoothTransitions: false,
-      background: {
-        type: 'dots',
-        color: '#e5e7eb',
-        size: 30,
-        dotSize: 2
-      },
-      ...canvasOptions
-    });
+    try {
+      // Initialize canvas manager
+      const manager = new DOMCanvasManager(containerRef.current, stableCanvasOptions);
 
-    // Initialize pan/zoom handler
-    const handler = new DOMPanZoomHandler(manager);
-    handler.attach();
+      // Get the viewport element that the manager created and store reference
+      const viewportElement = manager.getViewportElement();
+      if (viewportElement) {
+        viewportRef.current = viewportElement;
+        setViewportKey(Date.now()); // Force new portal creation
+        setIsViewportReady(true);
+      }
 
-    // Store refs for cleanup
-    managerRef.current = manager;
-    handlerRef.current = handler;
+      // Initialize pan/zoom handler
+      const handler = new DOMPanZoomHandler(manager);
+      handler.attach();
 
-    // Setup viewport change tracking
-    const updateViewport = () => {
-      const currentViewport = manager.getViewport();
-      setViewport(currentViewport);
-      onViewportChange?.(currentViewport);
-    };
+      // Store refs for cleanup
+      managerRef.current = manager;
+      handlerRef.current = handler;
 
-    // Listen for viewport changes
-    const interval = setInterval(updateViewport, 16); // 60fps
+      // Setup event-driven viewport change tracking
+      const updateViewport = (currentViewport: ViewportState) => {
+        try {
+          setViewport(currentViewport);
+          onViewportChangeRef.current?.(currentViewport);
+        } catch (error) {
+          console.error('Error updating viewport:', error);
+        }
+      };
 
-    // Cleanup function
-    return () => {
-      clearInterval(interval);
-      handler.detach();
-      manager.destroy();
+      // Subscribe to viewport changes instead of polling
+      const unsubscribe = manager.onViewportChange(updateViewport);
+
+      // Initial viewport update
+      updateViewport(manager.getViewport());
+
+      // Cleanup function
+      return () => {
+        try {
+          // Clear viewport first to prevent portal from rendering
+          setIsViewportReady(false);
+          
+          unsubscribe();
+          handler.detach();
+          manager.destroy();
+        } catch (error) {
+          console.error('Error during canvas cleanup:', error);
+        } finally {
+          managerRef.current = null;
+          handlerRef.current = null;
+          viewportRef.current = null;
+        }
+      };
+    } catch (error) {
+      console.error('Error initializing canvas:', error);
+      // Fallback: Reset refs to null
       managerRef.current = null;
       handlerRef.current = null;
-    };
-  }, []);
+      viewportRef.current = null;
+    }
+  }, [stableCanvasOptions]);
 
-  // Public API methods via refs
-  const canvasAPI = {
+  // Public API methods via refs - memoized to prevent re-creation
+  const canvasAPI = useMemo(() => ({
     panBy: (deltaX: number, deltaY: number) => {
-      managerRef.current?.panBy(deltaX, deltaY);
+      try {
+        managerRef.current?.panBy(deltaX, deltaY);
+      } catch (error) {
+        console.error('Error in panBy:', error);
+      }
     },
     zoomTo: (scale: number, center?: { x: number; y: number }) => {
-      managerRef.current?.zoomTo(scale, center);
+      try {
+        managerRef.current?.zoomTo(scale, center);
+      } catch (error) {
+        console.error('Error in zoomTo:', error);
+      }
     },
     zoomBy: (scaleDelta: number, center?: { x: number; y: number }) => {
-      managerRef.current?.zoomBy(scaleDelta, center);
+      try {
+        managerRef.current?.zoomBy(scaleDelta, center);
+      } catch (error) {
+        console.error('Error in zoomBy:', error);
+      }
     },
     centerOn: (worldPoint: { x: number; y: number }) => {
-      managerRef.current?.centerOn(worldPoint);
+      try {
+        managerRef.current?.centerOn(worldPoint);
+      } catch (error) {
+        console.error('Error in centerOn:', error);
+      }
     },
     fit: (bounds: { minX: number; minY: number; maxX: number; maxY: number }, padding?: number) => {
-      managerRef.current?.fit(bounds, padding);
+      try {
+        managerRef.current?.fit(bounds, padding);
+      } catch (error) {
+        console.error('Error in fit:', error);
+      }
     },
     reset: () => {
-      managerRef.current?.reset();
+      try {
+        managerRef.current?.reset();
+      } catch (error) {
+        console.error('Error in reset:', error);
+      }
     },
     getViewport: () => {
-      return managerRef.current?.getViewport() || { x: 0, y: 0, scale: 1 };
+      try {
+        return managerRef.current?.getViewport() || { x: 0, y: 0, scale: 1 };
+      } catch (error) {
+        console.error('Error in getViewport:', error);
+        return { x: 0, y: 0, scale: 1 };
+      }
     },
     screenToWorld: (screenPoint: { x: number; y: number }) => {
-      return managerRef.current?.screenToWorld(screenPoint) || { x: 0, y: 0 };
+      try {
+        return managerRef.current?.screenToWorld(screenPoint) || { x: 0, y: 0 };
+      } catch (error) {
+        console.error('Error in screenToWorld:', error);
+        return { x: 0, y: 0 };
+      }
     },
     worldToScreen: (worldPoint: { x: number; y: number }) => {
-      return managerRef.current?.worldToScreen(worldPoint) || { x: 0, y: 0 };
+      try {
+        return managerRef.current?.worldToScreen(worldPoint) || { x: 0, y: 0 };
+      } catch (error) {
+        console.error('Error in worldToScreen:', error);
+        return { x: 0, y: 0 };
+      }
     }
-  };
+  }), []);
+
+  // Expose API via ref
+  useImperativeHandle(ref, () => canvasAPI, [canvasAPI]);
 
   return (
     <div className={cn("infinite-canvas-root", className)}>
@@ -175,10 +321,31 @@ export default function InfiniteCanvas({
       <div 
         ref={containerRef}
         className="absolute inset-0 cursor-grab active:cursor-grabbing"
-        style={{ touchAction: 'none' }}
+        style={{ touchAction: 'none', userSelect: 'none' }}
       >
-        {children}
+        {/* Children will be rendered into the viewport element created by DOMCanvasManager */}
       </div>
+      
+      {/* Render children into viewport element using portal */}
+      {isViewportReady && viewportRef.current && (() => {
+        try {
+          // Additional safety checks
+          if (!document.contains(viewportRef.current)) {
+            return null;
+          }
+          return createPortal(
+            <div key={viewportKey}>{children}</div>, 
+            viewportRef.current
+          );
+        } catch (error) {
+          console.warn('Portal render error:', error);
+          return null;
+        }
+      })()}
     </div>
   );
-}
+});
+
+InfiniteCanvas.displayName = 'InfiniteCanvas';
+
+export default InfiniteCanvas;

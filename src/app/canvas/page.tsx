@@ -1,10 +1,21 @@
 "use client";
 
-import InfiniteCanvas from '@/components/InfiniteCanvas';
-import { useState } from 'react';
+import InfiniteCanvas, { type InfiniteCanvasRef } from '@/components/InfiniteCanvas';
+import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
+import { signal } from '@preact/signals-react';
 import type { ViewportState } from '@/packages/infinite-canvas';
 import { cn } from '@/lib/utils';
-import { User, Globe, Shield, Database, Link, Target, GripVertical, MoreVertical, Copy, Eye, Trash2 } from 'lucide-react';
+import { User, Globe, Shield, Database, Link, Target, GripVertical, MoreVertical, Copy, Eye } from 'lucide-react';
+import { useDragSystem, type Entity as BaseEntity } from '@/hooks/useDragSystem';
+
+// Extended Entity interface for OSINT entities
+interface OSINTEntity extends BaseEntity {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  subtitle: string;
+  type: string;
+  confidence: 'high' | 'medium' | 'low';
+}
 
 // OSINT Entity Components
 const EntityCard = ({ 
@@ -14,15 +25,24 @@ const EntityCard = ({
   type, 
   confidence,
   style,
-  className = "" 
+  className = "",
+  dragHandlers,
+  isDragging: _isDragging = false, // eslint-disable-line @typescript-eslint/no-unused-vars
+  isBeingDragged = false
 }: {
-  icon: any;
+  icon: React.ComponentType<{ className?: string }>;
   title: string;
   subtitle: string;
   type: string;
   confidence: 'high' | 'medium' | 'low';
   style?: React.CSSProperties;
   className?: string;
+  dragHandlers?: {
+    onMouseDown: (event: React.MouseEvent) => void;
+    onTouchStart: (event: React.TouchEvent) => void;
+  };
+  isDragging?: boolean;
+  isBeingDragged?: boolean;
 }) => {
   const confidenceColors = {
     high: 'border-gray-800/60',
@@ -33,29 +53,56 @@ const EntityCard = ({
   return (
     <div 
       className={cn(
-        "absolute glass-card min-w-48 max-w-64 group",
+        "absolute glass-card min-w-48 max-w-64 group transition-shadow",
         "border-2",
         confidenceColors[confidence],
+        isBeingDragged && "shadow-2xl scale-105 z-50",
         className
       )}
-      style={style}
+      style={{
+        ...style
+      }}
     >
       {/* Container Header with Drag Handle and Actions */}
-      <div className="p-1.5 border-b border-border-secondary flex items-center justify-between opacity-60 hover:opacity-100">
-        <div className="flex items-center gap-1">
-          <div className="cursor-move p-0.5 hover:bg-border-secondary rounded">
+      <div 
+        className={cn(
+          "p-1.5 border-b border-border-secondary flex items-center justify-between opacity-60 hover:opacity-100 select-none",
+          isBeingDragged ? "cursor-grabbing" : "cursor-grab"
+        )}
+        data-draggable="true"
+        onMouseDown={dragHandlers?.onMouseDown}
+        onTouchStart={dragHandlers?.onTouchStart}
+        style={{ touchAction: 'none' }}
+      >
+        <div className="flex items-center gap-1 pointer-events-none">
+          <div className="p-0.5 rounded">
             <GripVertical className="w-3 h-3 text-muted" />
           </div>
           <span className="text-xs text-muted">{type}</span>
         </div>
-        <div className="flex items-center">
-          <button className="p-0.5 hover:bg-border-secondary rounded opacity-0 group-hover:opacity-100" title="View Details">
+        <div className="flex items-center pointer-events-auto">
+          <button 
+            className="p-0.5 hover:bg-border-secondary rounded opacity-0 group-hover:opacity-100" 
+            title="View Details"
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+          >
             <Eye className="w-3 h-3 text-muted" />
           </button>
-          <button className="p-0.5 hover:bg-border-secondary rounded opacity-0 group-hover:opacity-100" title="Copy">
+          <button 
+            className="p-0.5 hover:bg-border-secondary rounded opacity-0 group-hover:opacity-100" 
+            title="Copy"
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+          >
             <Copy className="w-3 h-3 text-muted" />
           </button>
-          <button className="p-0.5 hover:bg-border-secondary rounded opacity-0 group-hover:opacity-100" title="More Actions">
+          <button 
+            className="p-0.5 hover:bg-border-secondary rounded opacity-0 group-hover:opacity-100" 
+            title="More Actions"
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+          >
             <MoreVertical className="w-3 h-3 text-muted" />
           </button>
         </div>
@@ -92,12 +139,10 @@ const EntityCard = ({
 
 const ConnectionLine = ({ 
   from, 
-  to, 
-  viewport 
+  to
 }: { 
   from: { x: number; y: number }; 
-  to: { x: number; y: number }; 
-  viewport: ViewportState;
+  to: { x: number; y: number };
 }) => {
   const startX = from.x + 120; // Center of card
   const startY = from.y + 60;
@@ -142,61 +187,179 @@ const ConnectionLine = ({
   );
 };
 
+// Initial data
+const initialEntities: OSINTEntity[] = [
+  { 
+    id: 'person1',
+    icon: User,
+    title: 'John Doe',
+    subtitle: 'Target Individual',
+    type: 'Person',
+    confidence: 'high' as const,
+    position: { x: 200, y: 150 }
+  },
+  {
+    id: 'domain1',
+    icon: Globe,
+    title: 'example.com',
+    subtitle: 'Primary Domain',
+    type: 'Domain',
+    confidence: 'high' as const,
+    position: { x: 500, y: 100 }
+  },
+  {
+    id: 'cert1',
+    icon: Shield,
+    title: 'SSL Certificate',
+    subtitle: 'Let\'s Encrypt Authority',
+    type: 'Certificate',
+    confidence: 'medium' as const,
+    position: { x: 800, y: 200 }
+  },
+  {
+    id: 'db1',
+    icon: Database,
+    title: 'Database Leak',
+    subtitle: 'Breach from 2023',
+    type: 'Data',
+    confidence: 'low' as const,
+    position: { x: 200, y: 400 }
+  },
+  {
+    id: 'social1',
+    icon: Target,
+    title: '@johndoe',
+    subtitle: 'Twitter Profile',
+    type: 'Social',
+    confidence: 'high' as const,
+    position: { x: 600, y: 350 }
+  }
+];
+
+// Global signals
+const viewport = signal<ViewportState>({ x: 0, y: 0, scale: 1 });
+
 export default function CanvasPage() {
-  const [viewport, setViewport] = useState<ViewportState>({ x: 0, y: 0, scale: 1 });
+  const canvasRef = useRef<InfiniteCanvasRef>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const handleViewportChange = (newViewport: ViewportState) => {
-    setViewport(newViewport);
-  };
+  // Use local state for viewport to avoid signal re-render issues with InfiniteCanvas
+  const [localViewport, setLocalViewport] = useState<ViewportState>({ x: 0, y: 0, scale: 1 });
+  
+  // Use React state for entities to ensure proper re-renders
+  const [entities, setEntities] = useState<OSINTEntity[]>(initialEntities);
 
-  // Entity positions
-  const entities = [
-    { 
-      id: 'person1',
-      icon: User,
-      title: 'John Doe',
-      subtitle: 'Target Individual',
-      type: 'Person',
-      confidence: 'high' as const,
-      position: { x: 200, y: 150 }
-    },
-    {
-      id: 'domain1',
-      icon: Globe,
-      title: 'example.com',
-      subtitle: 'Primary Domain',
-      type: 'Domain',
-      confidence: 'high' as const,
-      position: { x: 500, y: 100 }
-    },
-    {
-      id: 'cert1',
-      icon: Shield,
-      title: 'SSL Certificate',
-      subtitle: 'Let\'s Encrypt Authority',
-      type: 'Certificate',
-      confidence: 'medium' as const,
-      position: { x: 800, y: 200 }
-    },
-    {
-      id: 'db1',
-      icon: Database,
-      title: 'Database Leak',
-      subtitle: 'Breach from 2023',
-      type: 'Data',
-      confidence: 'low' as const,
-      position: { x: 200, y: 400 }
-    },
-    {
-      id: 'social1',
-      icon: Target,
-      title: '@johndoe',
-      subtitle: 'Twitter Profile',
-      type: 'Social',
-      confidence: 'high' as const,
-      position: { x: 600, y: 350 }
+  // Memoize background object to prevent re-renders
+  const backgroundConfig = useMemo(() => ({
+    type: 'dots' as const,
+    color: 'rgba(107, 114, 128, 0.2)',
+    size: 40,
+    dotSize: 2
+  }), []);
+
+  const handleViewportChange = useCallback((newViewport: ViewportState) => {
+    setLocalViewport(newViewport);
+    // Update signal for other components that might need it
+    viewport.value = newViewport;
+  }, []);
+
+  // Handle entity position updates - use functional update for better performance
+  const handleEntityMove = useCallback((entityId: string, newPosition: { x: number; y: number }) => {
+    setEntities(prev => {
+      const entityIndex = prev.findIndex(entity => entity.id === entityId);
+      if (entityIndex === -1) return prev;
+      
+      const entity = prev[entityIndex];
+      // Only update if position actually changed to avoid unnecessary re-renders
+      if (entity.position.x === newPosition.x && entity.position.y === newPosition.y) {
+        return prev;
+      }
+      
+      const newEntities = [...prev];
+      newEntities[entityIndex] = { ...entity, position: newPosition };
+      return newEntities;
+    });
+  }, []);
+
+  // Initialize drag system with local viewport to prevent re-renders
+  const {
+    // dragState - available for future use
+    getDragHandlers,
+    globalDragHandlers,
+    isDragging,
+    draggedEntityId
+  } = useDragSystem({
+    entities: entities,
+    onEntityMove: handleEntityMove,
+    viewport: localViewport
+  });
+
+  // Create stable event handler references
+  const dragHandlersRef = useRef(globalDragHandlers);
+  dragHandlersRef.current = globalDragHandlers;
+  
+  const isDraggingRef = useRef(isDragging);
+  isDraggingRef.current = isDragging;
+
+  // Stable event handlers that don't change
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDraggingRef.current) return;
+    const syntheticEvent = {
+      preventDefault: () => e.preventDefault(),
+      stopPropagation: () => e.stopPropagation(),
+      clientX: e.clientX,
+      clientY: e.clientY,
+      target: e.target,
+      currentTarget: e.currentTarget
+    } as React.MouseEvent;
+    dragHandlersRef.current.onMouseMove(syntheticEvent);
+  }, []);
+  
+  const handleMouseUp = useCallback(() => {
+    if (!isDraggingRef.current) return;
+    dragHandlersRef.current.onMouseUp();
+  }, []);
+  
+  const handleTouchMove = useCallback((e: TouchEvent) => {
+    if (!isDraggingRef.current || e.touches.length === 0) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const syntheticEvent = {
+      preventDefault: () => {},
+      stopPropagation: () => {},
+      touches: [{
+        clientX: touch.clientX,
+        clientY: touch.clientY
+      }],
+      target: e.target,
+      currentTarget: e.currentTarget
+    } as unknown as React.TouchEvent;
+    dragHandlersRef.current.onTouchMove(syntheticEvent);
+  }, []);
+  
+  const handleTouchEnd = useCallback(() => {
+    if (!isDraggingRef.current) return;
+    dragHandlersRef.current.onTouchEnd();
+  }, []);
+
+  useEffect(() => {
+    if (isDragging) {
+      // Use capture phase to ensure entity drag events are handled before canvas events
+      document.addEventListener('mousemove', handleMouseMove, { capture: true });
+      document.addEventListener('mouseup', handleMouseUp, { capture: true });
+      document.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
+      document.addEventListener('touchend', handleTouchEnd, { capture: true });
+      document.addEventListener('touchcancel', handleTouchEnd, { capture: true });
+
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
+        document.removeEventListener('touchcancel', handleTouchEnd);
+      };
     }
-  ];
+  }, [isDragging, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]);
 
   const connections = [
     { from: entities[0].position, to: entities[1].position },
@@ -206,9 +369,10 @@ export default function CanvasPage() {
   ];
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" ref={containerRef}>
       <div className="h-screen relative">
         <InfiniteCanvas
+          ref={canvasRef}
           className="w-full h-full"
           showDebug={true}
           onViewportChange={handleViewportChange}
@@ -217,12 +381,7 @@ export default function CanvasPage() {
           scaleSensitivity={0.005}
           enablePan={true}
           enableZoom={true}
-          background={{
-            type: 'dots',
-            color: 'rgba(107, 114, 128, 0.2)',
-            size: 40,
-            dotSize: 2
-          }}
+          background={backgroundConfig}
         >
           {/* Connection Lines */}
           {connections.map((connection, index) => (
@@ -230,12 +389,11 @@ export default function CanvasPage() {
               key={index}
               from={connection.from}
               to={connection.to}
-              viewport={viewport}
             />
           ))}
 
           {/* OSINT Entities */}
-          {entities.map((entity, index) => (
+          {entities.map((entity) => (
             <EntityCard
               key={entity.id}
               icon={entity.icon}
@@ -247,6 +405,9 @@ export default function CanvasPage() {
                 left: entity.position.x,
                 top: entity.position.y
               }}
+              dragHandlers={getDragHandlers(entity.id)}
+              isDragging={isDragging}
+              isBeingDragged={draggedEntityId === entity.id}
             />
           ))}
 

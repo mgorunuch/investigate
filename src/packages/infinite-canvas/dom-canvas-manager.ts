@@ -1,10 +1,40 @@
-import type { CanvasState, ViewportState, Point, DOMCanvasOptions, TransformMatrix, BackgroundOptions } from './types';
+import type { CanvasState, ViewportState, Point, DOMCanvasOptions, TransformMatrix } from './types';
 
+/**
+ * DOMCanvasManager handles the core viewport management and transformation logic
+ * for an infinite canvas implementation using DOM elements.
+ * 
+ * Features:
+ * - Viewport transformation with hardware-accelerated CSS transforms
+ * - Event-driven viewport change notifications
+ * - Automatic scale clamping within configured bounds
+ * - Efficient background pattern rendering
+ * - Proper cleanup and memory management
+ * 
+ * @example
+ * ```ts
+ * const manager = new DOMCanvasManager(containerElement, {
+ *   minScale: 0.1,
+ *   maxScale: 5,
+ *   background: { type: 'dots', size: 30 }
+ * });
+ * 
+ * // Subscribe to viewport changes
+ * const unsubscribe = manager.onViewportChange(viewport => {
+ *   console.log('Viewport changed:', viewport);
+ * });
+ * 
+ * // Cleanup
+ * manager.destroy();
+ * unsubscribe();
+ * ```
+ */
 export class DOMCanvasManager {
   private state: CanvasState;
   private options: Required<DOMCanvasOptions>;
   private resizeObserver: ResizeObserver | null = null;
   private backgroundElement: HTMLElement | null = null;
+  private viewportChangeCallbacks: Set<(viewport: ViewportState) => void> = new Set();
 
   constructor(container: HTMLElement, options: DOMCanvasOptions = {}) {
     this.options = {
@@ -70,12 +100,12 @@ export class DOMCanvasManager {
     // Create background if needed
     if (this.options.background.type !== 'none') {
       this.backgroundElement = this.createBackground();
-      // Append to document body for truly infinite coverage
-      document.body.appendChild(this.backgroundElement);
+      // Insert background as first child of container to avoid global DOM pollution
+      this.state.container.insertBefore(this.backgroundElement, this.state.container.firstChild);
     }
 
-    // Move existing children to viewport
-    while (this.state.container.firstChild) {
+    // Move existing children to viewport (excluding background)
+    while (this.state.container.firstChild && this.state.container.firstChild !== this.backgroundElement) {
       viewport.appendChild(this.state.container.firstChild);
     }
 
@@ -89,14 +119,15 @@ export class DOMCanvasManager {
     const bg = document.createElement('div');
     const { background } = this.options;
     
-    // Make background truly infinite by covering the entire viewport container
-    bg.style.position = 'fixed';
+    // Position background to cover the entire container without global DOM pollution
+    bg.style.position = 'absolute';
     bg.style.top = '0';
     bg.style.left = '0';
-    bg.style.width = '100vw';
-    bg.style.height = '100vh';
+    bg.style.width = '100%';
+    bg.style.height = '100%';
     bg.style.pointerEvents = 'none';
     bg.style.zIndex = '-1';
+    bg.style.overflow = 'hidden';
     
     if (background.className) {
       bg.classList.add(background.className);
@@ -134,6 +165,8 @@ export class DOMCanvasManager {
   }
 
   public setViewport(viewport: Partial<ViewportState>): void {
+    const oldViewport = { ...this.state.viewport };
+    
     this.state.viewport = {
       ...this.state.viewport,
       ...viewport
@@ -148,6 +181,13 @@ export class DOMCanvasManager {
     }
     
     this.applyTransform();
+    
+    // Notify listeners only if viewport actually changed
+    if (oldViewport.x !== this.state.viewport.x || 
+        oldViewport.y !== this.state.viewport.y || 
+        oldViewport.scale !== this.state.viewport.scale) {
+      this.notifyViewportChange();
+    }
   }
 
   public getViewport(): ViewportState {
@@ -197,7 +237,7 @@ export class DOMCanvasManager {
     this.state.viewportElement.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${scale})`;
 
     // Update background positioning if it exists
-    if (this.backgroundElement && this.options.background.type !== 'none') {
+    if (this.backgroundElement && this.options.background.type !== 'none' && this.options.background.size) {
       const adjustedSize = this.options.background.size * scale;
       this.backgroundElement.style.backgroundSize = `${adjustedSize}px ${adjustedSize}px`;
       // Calculate background position to maintain infinite pattern alignment during zoom and pan
@@ -314,31 +354,51 @@ export class DOMCanvasManager {
     this.options.smoothTransitions = enable;
   }
 
+  public getOptions(): Readonly<Required<DOMCanvasOptions>> {
+    return { ...this.options };
+  }
+
+  public onViewportChange(callback: (viewport: ViewportState) => void): () => void {
+    this.viewportChangeCallbacks.add(callback);
+    return () => {
+      this.viewportChangeCallbacks.delete(callback);
+    };
+  }
+
+  private notifyViewportChange(): void {
+    const currentViewport = this.getViewport();
+    this.viewportChangeCallbacks.forEach(callback => {
+      try {
+        callback(currentViewport);
+      } catch (error) {
+        console.error('Error in viewport change callback:', error);
+      }
+    });
+  }
+
   public destroy(): void {
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
     }
 
+    // Clear all viewport change callbacks
+    this.viewportChangeCallbacks.clear();
+
     if (this.state.viewportElement && this.state.container) {
+      // Don't move React-managed children - React portal will handle cleanup
+      // Just clear our own managed elements and remove the viewport
+      
       // Remove background if it exists
-      if (this.backgroundElement) {
-        // Remove from document body since we appended it there
-        if (this.backgroundElement.parentNode) {
-          this.backgroundElement.parentNode.removeChild(this.backgroundElement);
-        }
+      if (this.backgroundElement && this.backgroundElement.parentNode) {
+        this.backgroundElement.parentNode.removeChild(this.backgroundElement);
         this.backgroundElement = null;
       }
-
-      // Move children back to container
-      while (this.state.viewportElement.firstChild) {
-        if (this.state.viewportElement.firstChild !== this.backgroundElement) {
-          this.state.container.appendChild(this.state.viewportElement.firstChild);
-        } else {
-          this.state.viewportElement.firstChild.remove();
-        }
+      
+      // Remove viewport element (React portal will clean up its children)
+      if (this.state.viewportElement.parentNode) {
+        this.state.viewportElement.parentNode.removeChild(this.state.viewportElement);
       }
-      this.state.viewportElement.remove();
     }
 
     this.state.container = null;
