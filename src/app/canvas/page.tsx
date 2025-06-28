@@ -88,7 +88,7 @@ const EntityCard = ({
           </div>
           <span className="text-xs text-muted font-medium">{title}</span>
         </div>
-        <div className="flex items-center pointer-events-auto">
+        <div className="flex items-center gap-1 ml-4 pointer-events-auto">
           <button
             className="p-0.5 hover:bg-border-secondary rounded opacity-0 group-hover:opacity-100 transition-all"
             title={isVisible ? "Hide entity" : "Show entity"}
