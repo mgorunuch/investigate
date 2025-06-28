@@ -58,7 +58,8 @@ const EntityCard = ({
   return (
     <div
       className={cn(
-        "absolute glass-card min-w-48 max-w-64 group transition-all duration-300",
+        "absolute glass-card min-w-48 max-w-64 group",
+        !isBeingDragged && "transition-all duration-300",
         "border-2",
         confidenceColors[confidence],
         isBeingDragged && "shadow-2xl z-50",
