@@ -56,7 +56,7 @@ const EntityCard = ({
         "absolute glass-card min-w-48 max-w-64 group transition-shadow",
         "border-2",
         confidenceColors[confidence],
-        isBeingDragged && "shadow-2xl scale-105 z-50",
+        isBeingDragged && "shadow-2xl z-50",
         className
       )}
       style={{
@@ -66,8 +66,8 @@ const EntityCard = ({
       {/* Container Header with Drag Handle and Actions */}
       <div 
         className={cn(
-          "p-1.5 border-b border-border-secondary flex items-center justify-between opacity-60 hover:opacity-100 select-none",
-          isBeingDragged ? "cursor-grabbing" : "cursor-grab"
+          "p-1.5 border-b border-border-secondary flex items-center justify-between opacity-60 hover:opacity-100 select-none transition-all duration-150",
+          isBeingDragged ? "cursor-grabbing bg-accent/10" : "cursor-grab hover:bg-accent/5"
         )}
         data-draggable="true"
         onMouseDown={dragHandlers?.onMouseDown}
@@ -75,8 +75,8 @@ const EntityCard = ({
         style={{ touchAction: 'none' }}
       >
         <div className="flex items-center gap-1 pointer-events-none">
-          <div className="p-0.5 rounded">
-            <GripVertical className="w-3 h-3 text-muted" />
+          <div className="p-0.5 rounded hover:bg-accent/20 transition-colors">
+            <GripVertical className="w-3 h-3 text-muted group-hover:text-accent" />
           </div>
           <span className="text-xs text-muted">{type}</span>
         </div>
