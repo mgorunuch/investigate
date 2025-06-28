@@ -107,24 +107,15 @@ Every API endpoint follows a strict 3-file structure:
 - **Charts**: Recharts, D3.js
 - **Authentication**: NextAuth.js (future)
 
-## 🐳 Production Deployment
+## 🚀 Production Deployment
 
-### Docker
+### Standard Deployment
 ```bash
-# Build image
-docker build -t investigate .
+# Build for production
+bun run build
 
-# Run container
-docker run -p 3000:3000 investigate
-```
-
-### Docker Compose
-```bash
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
+# Start production server
+bun run start
 ```
 
 ## 🔐 Security Features
