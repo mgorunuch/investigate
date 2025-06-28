@@ -1,36 +1,186 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Investigate - OSINT Intelligence Platform
 
-## Getting Started
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://www.typescriptlang.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.0-38B2AC)](https://tailwindcss.com/)
 
-First, run the development server:
+A comprehensive OSINT (Open Source Intelligence) investigation platform designed for security researchers and analysts to organize, analyze, and visualize intelligence data from multiple sources.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## 🎯 Purpose
+
+Streamline OSINT workflows by providing unified data collection, analysis, and reporting capabilities for cybersecurity investigations and threat intelligence research.
+
+## ✨ Key Features
+
+### Investigation Management
+- Create and manage investigation cases with defined targets and objectives
+- Track investigation progress and timelines
+- Multi-analyst collaboration with role-based access control
+
+### Data Collection & Integration
+- **Certificate Transparency**: CT log analysis and monitoring
+- **Domain Intelligence**: Subdomain enumeration, DNS analysis  
+- **Social Media**: Profile analysis, digital footprint mapping
+- **Infrastructure**: IP analysis, hosting relationships
+- **Document Intelligence**: Metadata extraction, content analysis
+
+### Analysis & Visualization
+- Entity relationship mapping with interactive network graphs
+- Timeline analysis for chronological intelligence visualization
+- Cross-source data correlation and validation
+- Confidence scoring for intelligence assessments
+
+### Reporting & Export
+- Generate comprehensive investigation reports
+- Export data in multiple formats (PDF, CSV, JSON)
+- Source attribution and audit trails
+- Advanced search and filtering capabilities
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 18+ or Bun runtime
+- PostgreSQL 14+ (for production)
+- Git
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/mgorunuch/investigate.git
+   cd investigate
+   ```
+
+2. **Install dependencies**
+   ```bash
+   bun install
+   ```
+
+3. **Start development server**
+   ```bash
+   bun run dev
+   ```
+
+4. **Open your browser**
+   Navigate to [http://localhost:3000](http://localhost:3000)
+
+## 🛠 Development Commands
+
+| Command | Description |
+|---------|-------------|
+| `bun run dev` | Start development server |
+| `bun run build` | Build for production |
+| `bun run start` | Start production server |
+| `bun run lint` | Run ESLint |
+| `bun run type-check` | Run TypeScript type checking |
+
+## 🏗 Architecture
+
+### Investigation-Centric Design
+The platform is built around **investigation cases** where analysts collect, organize, and analyze intelligence data.
+
+### API Structure
+Every API endpoint follows a strict 3-file structure:
+```
+/src/app/api/[endpoint]/
+├── route.ts      # Server-side API handler
+├── contracts.ts  # Zod schemas & TypeScript types  
+└── clients.ts    # Client-side functions
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Key Components
+- **Cases**: Individual investigations with specific targets and objectives
+- **Entities**: People, organizations, domains, IPs, certificates
+- **Relationships**: Connections between entities with source attribution
+- **Timeline Events**: Chronological intelligence data points
+- **Sources**: OSINT data sources with reliability scoring
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🔧 Technology Stack
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Framework**: Next.js 15 with App Router
+- **Runtime**: Bun
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS v4
+- **Database**: PostgreSQL (production)
+- **Validation**: Zod
+- **Charts**: Recharts, D3.js
+- **Authentication**: NextAuth.js (future)
 
-## Learn More
+## 🐳 Production Deployment
 
-To learn more about Next.js, take a look at the following resources:
+### Docker
+```bash
+# Build image
+docker build -t investigate .
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Run container
+docker run -p 3000:3000 investigate
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Docker Compose
+```bash
+# Start all services
+docker-compose up -d
 
-## Deploy on Vercel
+# View logs
+docker-compose logs -f
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🔐 Security Features
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Data Sanitization**: All imported intelligence data is sanitized
+- **Source Verification**: Automated checks for source authenticity
+- **Audit Logging**: Complete audit trail for all operations
+- **Access Control**: Role-based access to sensitive investigations
+- **Data Retention**: Configurable retention policies
+
+## 📊 OSINT Integration
+
+### Supported Sources
+- Certificate Transparency logs
+- Domain registration data
+- Social media platforms
+- Infrastructure databases
+- Public document repositories
+
+### Data Standards
+- **Source Attribution**: Every data point includes source metadata
+- **Entity Management**: Standardized schemas for all intelligence entities
+- **Relationship Modeling**: Explicit connections between entities
+- **Confidence Scoring**: All assessments include confidence levels
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Development Guidelines
+- Follow the established API structure (route.ts, contracts.ts, clients.ts)
+- Include comprehensive type definitions
+- Add Zod validation for all data inputs
+- Write tests for new functionality
+- Follow security best practices
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Built for the OSINT community
+- Inspired by modern threat intelligence platforms
+- Designed with security researchers in mind
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/mgorunuch/investigate/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/mgorunuch/investigate/discussions)
+- **Documentation**: [Wiki](https://github.com/mgorunuch/investigate/wiki)
+
+---
+
+**⚠️ Disclaimer**: This tool is intended for legitimate security research and investigation purposes only. Users are responsible for complying with applicable laws and regulations when conducting OSINT activities.
