@@ -411,36 +411,6 @@ export default function CanvasPage() {
             />
           ))}
 
-          {/* Floating Info Panel */}
-          <div 
-            className="absolute glass-card p-6 w-80"
-            style={{ left: '100px', top: '600px' }}
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <Link className="w-5 h-5 text-accent" />
-              <h3 className="font-semibold text-foreground">Investigation Summary</h3>
-            </div>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted">Total Entities:</span>
-                <span className="text-foreground font-medium">{entities.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted">Connections:</span>
-                <span className="text-foreground font-medium">{connections.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted">High Confidence:</span>
-                <span className="text-gray-800 font-medium">
-                  {entities.filter(e => e.confidence === 'high').length}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted">Investigation ID:</span>
-                <span className="text-foreground font-mono text-xs">INV-2025-001</span>
-              </div>
-            </div>
-          </div>
         </InfiniteCanvas>
       </div>
     </div>
